@@ -9,6 +9,9 @@ function sessionTreeRequest<T>(
   const ids = sessionTreeIDs(session, sessionID)
 
   if (!ids.length) return
+  // SAFETY: both request sources are caller-typed inputs, not unparsed values; this discriminates the
+  // live store accessor from the per-session map so callers can pass either.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
   const list = (id: string) => (typeof request === "function" ? request(id) : request[id])
   const id = ids.find((id) => list(id)?.some(include))
 
@@ -58,15 +61,15 @@ export function sessionPermissionRequest(
   return sessionTreeRequest(session, request, sessionID, include)
 }
 
+// Forms that block a tool call until the user answers, as opposed to informational forms.
+export function isBlockingForm(form: FormInfo) {
+  return form.metadata?.kind === "question" || form.metadata?.kind === "websearch.provider"
+}
+
 export function sessionFormRequest(
   session: SessionInfo[],
   request: Record<string, FormInfo[] | undefined> | ((sessionID: string) => FormInfo[] | undefined),
   sessionID?: string,
 ) {
-  return sessionTreeRequest(
-    session,
-    request,
-    sessionID,
-    (item) => item.metadata?.kind === "question" || item.metadata?.kind === "websearch.provider",
-  )
+  return sessionTreeRequest(session, request, sessionID, isBlockingForm)
 }
