@@ -1,0 +1,20 @@
+packages/app/src/app.tsx
+  h_05242cdacff7ac 13,103
+packages/app/src/session/requests/session-request-tree.ts
+  h_05242cdacff7ac 12-14,64-68,74
+packages/app/src/shell/document-title.test.ts
+  h_05242cdacff7ac 1-66
+packages/app/src/shell/document-title.tsx
+  h_05242cdacff7ac 1-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "5.30.1",
+  "base_commit_sha": "bef43027105736478ac4947dc66cc3e5c77988a1",
+  "prompts": {},
+  "humans": {
+    "h_05242cdacff7ac": {
+      "author": "MRXVAM <2747477431@qq.com>"
+    }
+  }
+}
