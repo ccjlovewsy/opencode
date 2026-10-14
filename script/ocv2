@@ -1,0 +1,117 @@
+#!/bin/sh
+# ocv2 — 启动「OpenCode v2 + 标签页状态前缀」实例。
+# 独立数据目录（不碰你日常 v1 的 opencode.db），provider/模型用你真实的 ~/.config/opencode 配置。
+# 服务端密码固定存在 $ROOT/password，所以浏览器配对一次后，重启也不用再配对。
+#
+#   ocv2           起服务（若没在跑）并打开浏览器
+#   ocv2 --no-open 起服务但不打开浏览器
+#   ocv2 link      只打印可直接打开的带 token 链接
+#   ocv2 stop      停掉
+set -eu
+
+REPO="${OCV2_REPO:-/Users/issuser/code/opencode}"
+PORT="${OCV2_PORT:-4098}"
+ROOT="${OCV2_ROOT:-/tmp/oc-v2}"
+
+# 直接在仓库里跑 ./script/ocv2 时，按脚本位置推断仓库根目录。
+if [ ! -d "$REPO" ]; then
+  case "$0" in
+  */script/*) REPO=$(cd "$(dirname "$0")/.." && pwd) ;;
+  esac
+fi
+LOG="$ROOT/server.log"
+PASSFILE="$ROOT/password"
+URL="http://127.0.0.1:$PORT/"
+BIN="$REPO/packages/cli/dist/opencode"
+
+running() { nc -z 127.0.0.1 "$PORT" 2>/dev/null; }
+
+password() {
+  if [ ! -s "$PASSFILE" ]; then
+    umask 077
+    head -c 24 /dev/urandom | base64 | tr -d '=+/' >"$PASSFILE"
+  fi
+  cat "$PASSFILE"
+}
+
+link() {
+  printf '%s?auth_token=%s\n' "$URL" "$(printf 'opencode:%s' "$(password)" | base64)"
+}
+
+# 默认用 Chrome 打开；没装 Chrome 就退回系统默认浏览器。可用 OCV2_BROWSER 覆盖。
+# 注：这台机器上 `open -a "Google Chrome" URL` 会静默失败，所以 Chrome 走 AppleScript 开；
+# 已经开着本实例的标签就复用那个标签（避免每敲一次多一个标签）。
+open_page() {
+  app="${OCV2_BROWSER:-Google Chrome}"
+  if [ "$app" = "Google Chrome" ] && osascript \
+    -e 'on run argv' \
+    -e 'set target to item 1 of argv' \
+    -e 'set prefix to item 2 of argv' \
+    -e 'tell application "Google Chrome"' \
+    -e 'repeat with w in windows' \
+    -e 'repeat with t in tabs of w' \
+    -e 'if (URL of t) starts with prefix then' \
+    -e 'set URL of t to target' \
+    -e 'set index of w to 1' \
+    -e 'activate' \
+    -e 'return' \
+    -e 'end if' \
+    -e 'end repeat' \
+    -e 'end repeat' \
+    -e 'open location target' \
+    -e 'activate' \
+    -e 'end tell' \
+    -e 'end run' "$1" "$URL" >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -d "/Applications/$app.app" ] || [ -d "$HOME/Applications/$app.app" ]; then
+    open -a "$app" "$1"
+    return 0
+  fi
+  echo "没找到 $app，改用系统默认浏览器打开" >&2
+  open "$1"
+}
+
+case "${1:-start}" in
+stop)
+  pkill -f "serve --port $PORT" 2>/dev/null || true
+  echo "ocv2 已停止"
+  ;;
+link)
+  link
+  ;;
+*)
+  if ! running; then
+    # 配置里的 {env:XXX} 占位符需要变量在环境里（你的 ~/.zshrc 导出了它们，在自己终端跑本命令即可）
+    missing=""
+    for name in $(grep -o 'env:[A-Za-z0-9_]*' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null | cut -d: -f2 | sort -u); do
+      eval "value=\${$name:-}"
+      [ -n "$value" ] || missing="$missing $name"
+    done
+    [ -z "$missing" ] || echo "提示：这些 provider 变量当前未设置：$missing（从你自己的终端运行 ocv2 会带上）" >&2
+    unset XDG_CONFIG_HOME
+    export XDG_DATA_HOME="$ROOT/data" XDG_CACHE_HOME="$ROOT/cache" XDG_STATE_HOME="$ROOT/state"
+    export OPENCODE_PASSWORD="$(password)"
+    cd "$REPO"
+    if [ -x "$BIN" ]; then
+      nohup "$BIN" serve --port "$PORT" --hostname 127.0.0.1 >"$LOG" 2>&1 &
+    else
+      nohup bun dev serve --port "$PORT" --hostname 127.0.0.1 >"$LOG" 2>&1 &
+    fi
+    i=0
+    while ! running && [ $i -lt 120 ]; do
+      sleep 0.5
+      i=$((i + 1))
+    done
+    if ! running; then
+      echo "启动失败，看 $LOG" >&2
+      exit 1
+    fi
+  fi
+  echo "ocv2 就绪：$URL"
+  echo "带 token 的链接：$(link)"
+  if [ "${1:-}" != "--no-open" ]; then
+    open_page "$(link)"
+  fi
+  ;;
+esac
