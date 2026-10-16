@@ -38,6 +38,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { DocumentTitle } from "@/components/document-title"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
@@ -316,6 +317,7 @@ function SharedProviders(props: ParentProps) {
       <BodyDesignClass />
       <CommandProvider>
         <DesktopCommands />
+        <DocumentTitle />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
     </>
